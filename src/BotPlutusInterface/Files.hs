@@ -37,7 +37,7 @@ import BotPlutusInterface.Effects (
  )
 import BotPlutusInterface.Types (PABConfig)
 import Cardano.Api (
-  AsType (AsPaymentKey, AsSigningKey, AsVerificationKey),
+  AsType (AsPaymentKey, AsSigningKey, AsVerificationKey, AsPaymentExtendedKey),
   BabbageEra,
   FileError,
   HasTextEnvelope,
@@ -49,7 +49,7 @@ import Cardano.Api (
   TxOut (TxOut),
   TxOutDatum (TxOutDatumHash, TxOutDatumInTx, TxOutDatumInline, TxOutDatumNone),
   getVerificationKey,
-  serialiseToRawBytes,
+  serialiseToRawBytes, PaymentExtendedKey, castVerificationKey
  )
 import Cardano.Api.Shelley (
   PlutusScript (PlutusScriptSerialised),
@@ -319,7 +319,7 @@ readSigningKey ::
   FilePath ->
   Eff effs (Either Text DummyPrivKey)
 readSigningKey filePath = do
-  pKey <- mapLeft (Text.pack . show) <$> readFileTextEnvelope @w (AsSigningKey AsPaymentKey) filePath
+  pKey <- mapLeft (Text.pack . show) <$> readFileTextEnvelope @w (AsSigningKey AsPaymentExtendedKey) filePath
   pure $ skeyToDummyPrivKey =<< pKey
 
 readVerificationKey ::
@@ -335,9 +335,9 @@ vkeyToDummyPrivKey :: VerificationKey PaymentKey -> Either Text DummyPrivKey
 vkeyToDummyPrivKey =
   fmap FromVKey . vkeyToDummyPrivKey'
 
-skeyToDummyPrivKey :: SigningKey PaymentKey -> Either Text DummyPrivKey
+skeyToDummyPrivKey :: SigningKey PaymentExtendedKey -> Either Text DummyPrivKey
 skeyToDummyPrivKey =
-  fmap FromSKey . vkeyToDummyPrivKey' . getVerificationKey
+  fmap FromSKey . vkeyToDummyPrivKey' . castVerificationKey . getVerificationKey
 
 {- | Warning! This implementation is not correct!
  This private key is derived from a normal signing key which uses a 32 byte private key compared

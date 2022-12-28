@@ -9,50 +9,50 @@ import BotPlutusInterface.BodyBuilder qualified as BodyBuilder
 import BotPlutusInterface.CardanoCLI qualified as CardanoCLI
 import BotPlutusInterface.CardanoNode.Effects (NodeQuery (UtxosAt))
 import BotPlutusInterface.Collateral qualified as Collateral
-import BotPlutusInterface.Effects (
-  PABEffect,
-  ShellArgs (..),
-  callCommand,
-  createDirectoryIfMissing,
-  getInMemCollateral,
-  handleContractLog,
-  handlePABEffect,
-  logToContract,
-  minUtxo,
-  posixTimeRangeToContainedSlotRange,
-  posixTimeToSlot,
-  posixTimeToSlotLength,
-  printBpiLog,
-  queryChainIndex,
-  queryNode,
-  readFileTextEnvelope,
-  saveBudget,
-  setInMemCollateral,
-  slotToPOSIXTime,
-  threadDelay,
-  uploadDir,
- )
+import BotPlutusInterface.Effects
+  ( PABEffect,
+    ShellArgs (..),
+    callCommand,
+    createDirectoryIfMissing,
+    getInMemCollateral,
+    handleContractLog,
+    handlePABEffect,
+    logToContract,
+    minUtxo,
+    posixTimeRangeToContainedSlotRange,
+    posixTimeToSlot,
+    posixTimeToSlotLength,
+    printBpiLog,
+    queryChainIndex,
+    queryNode,
+    readFileTextEnvelope,
+    saveBudget,
+    setInMemCollateral,
+    slotToPOSIXTime,
+    threadDelay,
+    uploadDir,
+  )
 import BotPlutusInterface.Files (DummyPrivKey (FromSKey, FromVKey))
 import BotPlutusInterface.Files qualified as Files
-import BotPlutusInterface.Types (
-  CollateralUtxo (CollateralUtxo),
-  ContractEnvironment (..),
-  LogLevel (Debug, Notice, Warn),
-  LogType (CollateralLog, PABLog),
-  PABConfig (pcNetwork, pcProtocolParams),
-  Tip (block, slot),
-  collateralValue,
-  ownAddress,
-  pcCollateralSize,
-  pcOwnPubKeyHash,
- )
-import Cardano.Api (
-  AsType (..),
-  EraInMode (..),
-  Tx (Tx),
-  TxOut (TxOut),
-  txOutValueToValue,
- )
+import BotPlutusInterface.Types
+  ( CollateralUtxo (CollateralUtxo),
+    ContractEnvironment (..),
+    LogLevel (Debug, Notice, Warn),
+    LogType (CollateralLog, PABLog),
+    PABConfig (pcNetwork, pcProtocolParams),
+    Tip (block, slot),
+    collateralValue,
+    ownAddress,
+    pcCollateralSize,
+    pcOwnPubKeyHash,
+  )
+import Cardano.Api
+  ( AsType (..),
+    EraInMode (..),
+    Tx (Tx),
+    TxOut (TxOut),
+    txOutValueToValue,
+  )
 import Cardano.Prelude (fromMaybe, liftA2)
 import Control.Lens (preview, (.~), (^.))
 import Control.Monad (join, unless, void, when)
@@ -92,19 +92,20 @@ import Ledger.Tx.CardanoAPI.Internal (fromCardanoValue)
 import Plutus.ChainIndex.TxIdState (fromTx, transactionStatus)
 import Plutus.ChainIndex.Types (RollbackState (..), TxIdState, TxStatus)
 import Plutus.Contract.Checkpoint (Checkpoint (..))
-import Plutus.Contract.Effects (
-  BalanceTxResponse (..),
-  ChainIndexQuery (..),
-  PABReq (..),
-  PABResp (..),
-  WriteBalancedTxResponse (..),
-  _TxIdResponse,
- )
+import Plutus.Contract.Effects
+  ( BalanceTxResponse (..),
+    ChainIndexQuery (..),
+    PABReq (..),
+    PABResp (..),
+    WriteBalancedTxResponse (..),
+    _TxIdResponse,
+  )
 import Plutus.Contract.Resumable (Resumable (..))
 import Plutus.Contract.Types (Contract (..), ContractEffs)
 import PlutusTx.Builtins (fromBuiltin)
 import Prettyprinter (Pretty (pretty), viaShow, (<+>))
 import Prettyprinter qualified as PP
+import System.FilePath (splitFileName, (</>))
 import Wallet.API qualified as WAPI
 import Wallet.Emulator.Error (WalletAPIError (..))
 import Prelude
@@ -165,8 +166,8 @@ instance Pretty Value where
         ( \(k, v) ->
             PP.hang 2 $
               PP.sep
-                [ pretty (show k) <+> ": "
-                , pretty v
+                [ pretty (show k) <+> ": ",
+                  pretty v
                 ]
         )
       $ KeyMap.toList obj
@@ -205,10 +206,9 @@ handleCheckpointIgnore =
         Retrieve {} -> pure (Right Nothing)
     )
 
-{- | Interpreting contract monad into CLI calls and chain index requests
- A few of these effects are not handled, these just return some dummy result to make the
- type system happy
--}
+-- | Interpreting contract monad into CLI calls and chain index requests
+-- A few of these effects are not handled, these just return some dummy result to make the
+-- type system happy
 handlePABReq ::
   forall (w :: Type) (effs :: [Type -> Type]).
   Member (PABEffect w) effs =>
@@ -283,14 +283,13 @@ adjustUnbalancedTx' unbalancedTx = runEitherT $ do
 
   return $ unbalancedTx & (tx . outputs .~ updatedOuts)
 
-{- | Await till transaction status change to something from `Unknown`.
- Uses `chain-index` to query transaction by id.
- Important notes:
- * if transaction is not found in `chain-index` status considered to be `Unknown`
- * if transaction is found but `transactionStatus` failed to make status - status considered to be `Unknown`
- * uses `TxStatusPolling` to set `chain-index` polling interval and number of blocks to wait until timeout,
-   if timeout is reached, returns whatever status it was able to get during last check
--}
+-- | Await till transaction status change to something from `Unknown`.
+-- Uses `chain-index` to query transaction by id.
+-- Important notes:
+-- * if transaction is not found in `chain-index` status considered to be `Unknown`
+-- * if transaction is found but `transactionStatus` failed to make status - status considered to be `Unknown`
+-- * uses `TxStatusPolling` to set `chain-index` polling interval and number of blocks to wait until timeout,
+--   if timeout is reached, returns whatever status it was able to get during last check
 awaitTxStatusChange ::
   forall (w :: Type) (effs :: [Type -> Type]).
   Member (PABEffect w) effs =>
@@ -318,9 +317,9 @@ awaitTxStatusChange contractEnv txId = do
     case (txStatus, currBlock > cutOffBlock) of
       (status, True) -> do
         helperLog . mconcat . fmap mconcat $
-          [ ["Timeout for waiting `TxId ", show txId, "` status change reached"]
-          , [" - waited ", show pollTimeout, " blocks."]
-          , [" Current status: ", show status]
+          [ ["Timeout for waiting `TxId ", show txId, "` status change reached"],
+            [" - waited ", show pollTimeout, " blocks."],
+            [" Current status: ", show status]
           ]
         pure status
       (Unknown, _) -> do
@@ -427,13 +426,13 @@ writeBalancedTx contractEnv cardanoTx = do
 
     unless fullySignable $
       lift . printBpiLog @w (Warn [PABLog]) . PP.vsep $
-        [ "Not all required signatures have signing key files. Please sign and submit the tx manually:"
-        , "Unsigned tx file:" <+> pretty (Files.txFilePath pabConf "raw" (Tx.txId tx'))
+        [ "Not all required signatures have signing key files. Please sign and submit the tx manually:",
+          "Unsigned tx file:" <+> pretty (Files.txFilePath pabConf "raw" (Tx.txId tx'))
         ]
           ++ if not $ null presentPubKeys
             then
-              [ "Some signatures were able to sign, partially signed tx available here:"
-              , "Partially signed tx file:" <+> pretty (Files.txFilePath pabConf "signed" cardanoTxId)
+              [ "Some signatures were able to sign, partially signed tx available here:",
+                "Partially signed tx file:" <+> pretty (Files.txFilePath pabConf "signed" cardanoTxId)
               ]
             else ["Missing Signatories (pkh):" <+> pretty (Text.unwords (map pkhToText missingPubKeys))]
 
@@ -444,37 +443,47 @@ writeBalancedTx contractEnv cardanoTx = do
       newEitherT $ CardanoCLI.submitTx @w pabConf tx'
 
     -- We need to replace the outfile we created at the previous step, as it currently still has the old (incorrect) id
-    mvFiles (Files.txFilePath pabConf "raw" (Tx.txId tx')) (Files.txFilePath pabConf "raw" cardanoTxId)
-    when signingHappened $
-      cpFiles (Files.txFilePath pabConf "signed" (Tx.txId tx')) (Files.txFilePath pabConf "signed" cardanoTxId)
+    let finalRawPath = Files.txFilePath pabConf "raw" cardanoTxId
+    mvFiles (Files.txFilePath pabConf "raw" (Tx.txId tx')) finalRawPath
+
+    cpFiles finalRawPath (toEmb finalRawPath)
+    when signingHappened $ do
+      let finalSignedPath = Files.txFilePath pabConf "signed" cardanoTxId
+      cpFiles (Files.txFilePath pabConf "signed" (Tx.txId tx')) finalSignedPath
+      cpFiles finalSignedPath (toEmb finalSignedPath)
 
     pure cardanoApiTx
   where
+    toEmb :: Text -> Text
+    toEmb p =
+      T.pack $
+        (\(p', f) -> p' </> "emb-" <> f) $
+          splitFileName (T.unpack p)
+
     mvFiles :: Text -> Text -> EitherT Text (Eff effs) ()
     mvFiles src dst =
       newEitherT $
         callCommand @w
           ShellArgs
-            { cmdName = "mv"
-            , cmdArgs = [src, dst]
-            , cmdOutParser = const ()
+            { cmdName = "mv",
+              cmdArgs = [src, dst],
+              cmdOutParser = const ()
             }
     cpFiles :: Text -> Text -> EitherT Text (Eff effs) ()
     cpFiles src dst =
       newEitherT $
         callCommand @w
           ShellArgs
-            { cmdName = "cp"
-            , cmdArgs = [src, dst]
-            , cmdOutParser = const ()
+            { cmdName = "cp",
+              cmdArgs = [src, dst],
+              cmdOutParser = const ()
             }
 
 pkhToText :: Ledger.PubKey -> Text
 pkhToText = encodeByteString . fromBuiltin . Ledger.getPubKeyHash . Ledger.pubKeyHash
 
-{- | Wait at least until the given slot. The slot number only changes when a new block is appended
- to the chain so it waits for at least one block
--}
+-- | Wait at least until the given slot. The slot number only changes when a new block is appended
+-- to the chain so it waits for at least one block
 awaitSlot ::
   forall (w :: Type) (effs :: [Type -> Type]).
   Member (PABEffect w) effs =>
@@ -489,9 +498,8 @@ awaitSlot contractEnv s@(Slot n) = do
       | n < tip'.slot -> pure $ Slot tip'.slot
     _ -> awaitSlot contractEnv s
 
-{- | Wait at least until the given time. Uses the awaitSlot under the hood, so the same constraints
-     are applying here as well.
--}
+-- | Wait at least until the given time. Uses the awaitSlot under the hood, so the same constraints
+--     are applying here as well.
 awaitTime ::
   forall (w :: Type) (effs :: [Type -> Type]).
   Member (PABEffect w) effs =>
@@ -597,9 +605,8 @@ handleCollateral cEnv = do
             T.pack $
               "PKH: " <> show ownPkh <> ". Failed to make collateral: " <> show err
 
-{- | Create collateral UTxO by submitting Tx.
-  Then try to find created UTxO at own PKH address.
--}
+-- | Create collateral UTxO by submitting Tx.
+--  Then try to find created UTxO at own PKH address.
 makeCollateral ::
   forall (w :: Type) (effs :: [Type -> Type]).
   Member (PABEffect w) effs =>
@@ -655,8 +662,7 @@ findCollateralAtOwnPKH cEnv =
     isAcceptableCollateral (_, v) = fromCardanoValue v == collateralValue (cePABConfig cEnv)
     txOutvalue (TxOut _ v _ _) = txOutValueToValue v
 
-{- | Construct a 'NonEmpty' list from a single element.
- Should be replaced by NonEmpty.singleton after updating to base 4.15
--}
+-- | Construct a 'NonEmpty' list from a single element.
+-- Should be replaced by NonEmpty.singleton after updating to base 4.15
 nonEmptySingleton :: a -> NonEmpty a
 nonEmptySingleton = (:| [])
